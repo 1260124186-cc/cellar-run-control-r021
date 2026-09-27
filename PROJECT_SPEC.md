@@ -26,12 +26,13 @@ deferred to a later engineering task.
 
 A formula contains an identifier, normalized name, style label, target original
 gravity, target final gravity, maximum fermentation temperature, minimum and
-maximum planned days, ordered process steps, lifecycle state, version, and
-timestamps.
+maximum planned days, ordered process steps, lifecycle state, revision number,
+revision lineage metadata, version, and timestamps.
 
-States are `draft`, `approved`, and `retired`.
+States are `draft`, `approved`, `superseded`, and `retired`.
 
-- Names are unique after case folding and whitespace normalization.
+- Names are unique after case folding and whitespace normalization. A revision
+  lineage shares one name across its versions.
 - Target original gravity is in the inclusive range 1.030 to 1.120.
 - Target final gravity is positive, lower than target original gravity, and
   differs from it by at least 0.005.
@@ -43,6 +44,15 @@ States are `draft`, `approved`, and `retired`.
 - Step hold times are 1 to 1440 minutes.
 - `draft -> approved` requires a complete valid step list.
 - An approved formula is immutable.
+- A controlled revision can be started only from the current approved formula.
+  The candidate is a draft copy that records the source formula identifier and
+  the source version it was taken from, and it never replaces the current
+  version before approval.
+- Approving a revision candidate atomically moves its source to `superseded`.
+  A candidate whose recorded source version no longer matches is rejected as
+  stale, and repeated approval is rejected, both without partial writes.
+- A superseded formula remains queryable but cannot be modified, approved
+  again, or attached to new runs.
 - `approved -> retired` is allowed only when no run currently uses it.
 
 ### Vessel
@@ -64,14 +74,16 @@ States are `available`, `reserved`, `in_use`, `cleaning`, and `retired`.
 ### FermentationRun
 
 A run contains an identifier, unique run code, an approved formula identifier,
-an optional vessel identifier, planned volume, notes, lifecycle state,
-timetable, ordered observations, final metrics, version, and timestamps.
+the adopted formula revision, an optional vessel identifier, planned volume,
+notes, lifecycle state, timetable, ordered observations, final metrics,
+version, and timestamps.
 
 States are `planned`, `reserved`, `fermenting`, `conditioning`, `completed`,
 and `aborted`.
 
 - Planned volume is greater than zero and cannot exceed vessel capacity.
-- Only an approved formula may be attached to a run.
+- Only the current approved formula revision may be attached to a new run, and
+  the run keeps tracing that exact formula version afterwards.
 - `planned -> reserved` atomically reserves an available vessel.
 - `reserved -> fermenting` requires that the vessel still belongs to the run.
 - `fermenting -> conditioning` requires at least two observations.
@@ -115,7 +127,28 @@ and repeated approval return stable error codes without partial writes.
 This path crosses HTTP protocol handling, application orchestration, domain
 rules, and snapshot storage.
 
-### 2. Vessel Run Lifecycle
+### 2. Formula Revision
+
+Public entry points are:
+
+- `POST /v1/formulas/{id}/revisions`
+- `PUT /v1/formulas/{id}/steps`
+- `POST /v1/formulas/{id}/approve`
+- `GET /v1/formulas/{id}`
+- `POST /v1/runs`
+
+The client starts a revision candidate from the current approved formula,
+adjusts its draft step list, and approves it. Approval atomically supersedes
+the source version; the candidate never replaces the current version before
+that point. New runs trace the exact adopted formula revision. Repeated
+approval, a stale recorded source version, and an invalid source (draft,
+superseded, retired, or missing) return stable error codes without partial
+writes.
+
+This path crosses HTTP protocol handling, application orchestration, domain
+rules, and snapshot storage.
+
+### 3. Vessel Run Lifecycle
 
 Public entry points are:
 
@@ -133,7 +166,7 @@ produce stable failures without changing vessel or run state.
 This path crosses HTTP protocol handling, application orchestration, domain
 rules, storage coordination, and resource lifecycle.
 
-### 3. Observations And Completion
+### 4. Observations And Completion
 
 Public entry points are:
 
@@ -210,11 +243,12 @@ task owns systematic tests for validation boundaries, state transitions,
 numeric calculations, stale revisions, storage failures, and concurrent
 reservation attempts.
 
-The current build command is `go build ./...`. Three bounded production checks
+The current build command is `go build ./...`. Four bounded production checks
 start the real HTTP handler, issue real JSON requests, check success and failure
 behavior, and exit without external services:
 
 - `go run ./cmd/fermentctl check formula-approval`
+- `go run ./cmd/fermentctl check formula-revision`
 - `go run ./cmd/fermentctl check vessel-run-lifecycle`
 - `go run ./cmd/fermentctl check observations-completion`
 

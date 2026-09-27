@@ -19,6 +19,7 @@ func (s *Service) CreateFormula(input CreateFormulaInput) (domain.Formula, error
 		MaximumDays:           input.MaximumDays,
 		Steps:                 []domain.FormulaStep{},
 		State:                 domain.FormulaDraft,
+		Revision:              1,
 		Version:               1,
 		CreatedAt:             now,
 		UpdatedAt:             now,
@@ -47,6 +48,60 @@ func (s *Service) CreateFormula(input CreateFormulaInput) (domain.Formula, error
 		return domain.Formula{}, err
 	}
 	return formula.Clone(), nil
+}
+
+func (s *Service) CreateFormulaRevision(
+	sourceID string,
+	input VersionInput,
+) (domain.Formula, error) {
+	var created domain.Formula
+	err := s.store.Execute(func(snapshot *domain.Snapshot) error {
+		source, ok := snapshot.Formulas[sourceID]
+		if !ok {
+			return domain.NewError(domain.CodeFormulaNotFound, "formula was not found")
+		}
+		if err := s.checkExpected(source.Version, input.ExpectedVersion); err != nil {
+			return err
+		}
+		if source.State != domain.FormulaApproved {
+			return domain.NewError(domain.CodeFormulaState,
+				"only the current approved formula can start a revision")
+		}
+		id, err := generateEntityID("formula")
+		if err != nil {
+			return domain.NewError(domain.CodeStorage, err.Error())
+		}
+		now := s.clock.Now()
+		sourceVersion := source.Version
+		candidate := domain.Formula{
+			ID:                    id,
+			Name:                  source.Name,
+			Style:                 source.Style,
+			TargetOriginalGravity: source.TargetOriginalGravity,
+			TargetFinalGravity:    source.TargetFinalGravity,
+			MaxFermentationTempC:  source.MaxFermentationTempC,
+			MinimumDays:           source.MinimumDays,
+			MaximumDays:           source.MaximumDays,
+			Steps:                 append([]domain.FormulaStep(nil), source.Steps...),
+			State:                 domain.FormulaDraft,
+			Revision:              source.Revision + 1,
+			RevisionOf:            &source.ID,
+			SourceVersion:         &sourceVersion,
+			Version:               1,
+			CreatedAt:             now,
+			UpdatedAt:             now,
+		}
+		if err := candidate.Validate(); err != nil {
+			return err
+		}
+		snapshot.Formulas[candidate.ID] = candidate
+		created = candidate.Clone()
+		return nil
+	})
+	if err != nil {
+		return domain.Formula{}, err
+	}
+	return created, nil
 }
 
 func (s *Service) SetFormulaSteps(
@@ -86,8 +141,24 @@ func (s *Service) ApproveFormula(id string, input VersionInput) (domain.Formula,
 		if err := s.checkExpected(formula.Version, input.ExpectedVersion); err != nil {
 			return err
 		}
-		if err := formula.Approve(s.clock.Now()); err != nil {
+		now := s.clock.Now()
+		if err := formula.Approve(now); err != nil {
 			return err
+		}
+		if formula.RevisionOf != nil {
+			source, ok := snapshot.Formulas[*formula.RevisionOf]
+			if !ok {
+				return domain.NewError(domain.CodeFormulaNotFound,
+					"revision source formula was not found")
+			}
+			if formula.SourceVersion == nil || source.Version != *formula.SourceVersion {
+				return domain.NewError(domain.CodeRevisionConflict,
+					"the revision source has changed since this candidate was created")
+			}
+			if err := source.Supersede(formula.ID, now); err != nil {
+				return err
+			}
+			snapshot.Formulas[source.ID] = source
 		}
 		snapshot.Formulas[id] = formula
 		updated = formula.Clone()

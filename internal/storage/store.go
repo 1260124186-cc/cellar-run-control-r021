@@ -91,10 +91,31 @@ func validateIndexes(value domain.Snapshot) error {
 		if key == "" {
 			return fmt.Errorf("formula %s has an empty normalized name", id)
 		}
+		if formula.RevisionOf != nil {
+			continue
+		}
 		if existing, found := expectedNames[key]; found && existing != id {
 			return fmt.Errorf("formula name index contains a duplicate key")
 		}
 		expectedNames[key] = id
+	}
+	for id, formula := range value.Formulas {
+		if formula.RevisionOf == nil {
+			continue
+		}
+		source, found := value.Formulas[*formula.RevisionOf]
+		if !found {
+			return fmt.Errorf("formula %s references a missing revision source", id)
+		}
+		if domain.NameKey(source.Name) != domain.NameKey(formula.Name) {
+			return fmt.Errorf("formula %s does not share its revision source name", id)
+		}
+		if formula.Revision != source.Revision+1 {
+			return fmt.Errorf("formula %s has an invalid revision sequence", id)
+		}
+		if formula.SourceVersion == nil || *formula.SourceVersion < 1 {
+			return fmt.Errorf("formula %s has an invalid source version", id)
+		}
 	}
 	if err := compareIndexes("formula name", value.NameIndex, expectedNames); err != nil {
 		return err

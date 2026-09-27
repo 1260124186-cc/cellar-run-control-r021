@@ -75,6 +75,26 @@
       ]
     },
     {
+      "id": "formula-revision",
+      "name": "Start, approve, and trace a controlled formula revision",
+      "entry": "POST /v1/formulas/{id}/revisions",
+      "steps": [
+        "start a revision candidate from the current approved formula",
+        "verify the candidate does not replace the current version before approval",
+        "adjust the candidate step list and approve it",
+        "verify the source is superseded and runs trace the adopted revision"
+      ],
+      "success": "returns the approved candidate as the new runnable revision and the superseded source",
+      "failure": "returns a stable state, not-found, or revision conflict error without partial writes",
+      "verification": "the check issues real HTTP requests and inspects success and failure responses",
+      "module_ids": [
+        "httpapi",
+        "service",
+        "domain",
+        "storage"
+      ]
+    },
+    {
       "id": "vessel-run-lifecycle",
       "name": "Register a vessel and advance a reserved run to fermentation",
       "entry": "POST /v1/vessels",

@@ -9,9 +9,10 @@ import (
 type FormulaState string
 
 const (
-	FormulaDraft    FormulaState = "draft"
-	FormulaApproved FormulaState = "approved"
-	FormulaRetired  FormulaState = "retired"
+	FormulaDraft      FormulaState = "draft"
+	FormulaApproved   FormulaState = "approved"
+	FormulaSuperseded FormulaState = "superseded"
+	FormulaRetired    FormulaState = "retired"
 )
 
 type FormulaStep struct {
@@ -32,6 +33,11 @@ type Formula struct {
 	MaximumDays           int           `json:"maximum_days"`
 	Steps                 []FormulaStep `json:"steps"`
 	State                 FormulaState  `json:"state"`
+	Revision              int           `json:"revision"`
+	RevisionOf            *string       `json:"revision_of,omitempty"`
+	SourceVersion         *int64        `json:"source_version,omitempty"`
+	SupersededBy          *string       `json:"superseded_by,omitempty"`
+	SupersededAt          *time.Time    `json:"superseded_at,omitempty"`
 	Version               int64         `json:"version"`
 	CreatedAt             time.Time     `json:"created_at"`
 	UpdatedAt             time.Time     `json:"updated_at"`
@@ -42,6 +48,22 @@ type Formula struct {
 func (f Formula) Clone() Formula {
 	cloned := f
 	cloned.Steps = append([]FormulaStep(nil), f.Steps...)
+	if f.RevisionOf != nil {
+		value := *f.RevisionOf
+		cloned.RevisionOf = &value
+	}
+	if f.SourceVersion != nil {
+		value := *f.SourceVersion
+		cloned.SourceVersion = &value
+	}
+	if f.SupersededBy != nil {
+		value := *f.SupersededBy
+		cloned.SupersededBy = &value
+	}
+	if f.SupersededAt != nil {
+		value := *f.SupersededAt
+		cloned.SupersededAt = &value
+	}
 	return cloned
 }
 
@@ -90,7 +112,25 @@ func (f Formula) Validate() error {
 	if len(f.Steps) > 24 {
 		return FieldError(CodeInvalidInput, "steps", "must contain at most 24 entries")
 	}
-	if f.State == FormulaApproved || f.State == FormulaRetired {
+	if f.Revision < 1 {
+		return FieldError(CodeInvalidInput, "revision", "must be at least 1")
+	}
+	if f.RevisionOf == nil {
+		if f.Revision != 1 {
+			return FieldError(CodeInvalidInput, "revision",
+				"must be 1 for a formula without a revision source")
+		}
+	} else {
+		if f.Revision < 2 {
+			return FieldError(CodeInvalidInput, "revision",
+				"must exceed the revision of its source formula")
+		}
+		if f.SourceVersion == nil || *f.SourceVersion < 1 {
+			return FieldError(CodeInvalidInput, "source_version",
+				"must record the source formula version")
+		}
+	}
+	if f.State == FormulaApproved || f.State == FormulaSuperseded || f.State == FormulaRetired {
 		if err := ValidateFormulaSteps(f.Steps, true); err != nil {
 			return err
 		}
@@ -153,6 +193,20 @@ func (f *Formula) Approve(now time.Time) error {
 	stamp := now.UTC()
 	f.State = FormulaApproved
 	f.ApprovedAt = &stamp
+	f.UpdatedAt = stamp
+	f.Version++
+	return nil
+}
+
+func (f *Formula) Supersede(byID string, now time.Time) error {
+	if f.State != FormulaApproved {
+		return NewError(CodeFormulaState,
+			"only the current approved formula can be superseded")
+	}
+	stamp := now.UTC()
+	f.State = FormulaSuperseded
+	f.SupersededBy = &byID
+	f.SupersededAt = &stamp
 	f.UpdatedAt = stamp
 	f.Version++
 	return nil

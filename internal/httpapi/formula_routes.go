@@ -61,6 +61,20 @@ func registerFormulaRoutes(mux *http.ServeMux, app *service.Service) {
 		writeJSON(response, http.StatusOK, formula)
 	})
 
+	mux.HandleFunc("POST /v1/formulas/{id}/revisions", func(response http.ResponseWriter, request *http.Request) {
+		expected, err := expectedVersion(request)
+		if !handleDecode(response, err) {
+			return
+		}
+		formula, err := app.CreateFormulaRevision(request.PathValue("id"),
+			service.VersionInput{ExpectedVersion: expected})
+		if err != nil {
+			writeDomainError(response, err)
+			return
+		}
+		writeJSON(response, http.StatusCreated, formula)
+	})
+
 	mux.HandleFunc("PUT /v1/formulas/{id}/steps", func(response http.ResponseWriter, request *http.Request) {
 		body, err := decodeJSON[setStepsRequest](response, request)
 		if !handleDecode(response, err) {

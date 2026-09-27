@@ -41,6 +41,10 @@ func (s *Service) CreateRun(input CreateRunInput) (domain.FermentationRun, error
 		if !ok {
 			return domain.NewError(domain.CodeFormulaNotFound, "formula was not found")
 		}
+		if formula.State == domain.FormulaSuperseded {
+			return domain.NewError(domain.CodeFormulaState,
+				"formula revision has been superseded and cannot start new runs")
+		}
 		if formula.State != domain.FormulaApproved {
 			return domain.NewError(domain.CodeFormulaState,
 				"run requires an approved formula")
@@ -49,6 +53,7 @@ func (s *Service) CreateRun(input CreateRunInput) (domain.FermentationRun, error
 			return domain.NewError(domain.CodeRunConflict,
 				"a run with the same code already exists")
 		}
+		run.FormulaRevision = formula.Revision
 		snapshot.Runs[run.ID] = run.Clone()
 		snapshot.RunIndex[run.Code] = run.ID
 		return nil

@@ -70,9 +70,20 @@ Formula workflow:
 - `POST /v1/formulas`
 - `GET /v1/formulas`
 - `GET /v1/formulas/{id}`
+- `POST /v1/formulas/{id}/revisions`
 - `PUT /v1/formulas/{id}/steps`
 - `POST /v1/formulas/{id}/approve`
 - `POST /v1/formulas/{id}/retire`
+
+An approved formula is immutable. `POST /v1/formulas/{id}/revisions` starts a
+controlled revision from the current approved formula: the candidate is a
+draft copy that records its source formula and the source version it was taken
+from. Editing steps and approval work exactly as for a new draft. Approving
+the candidate atomically supersedes its source; the superseded formula stays
+readable but cannot be modified or used for new runs. Each run records the
+adopted `formula_id` and `formula_revision`, and a candidate whose source has
+meanwhile changed is rejected with `revision_conflict` instead of producing
+partial state.
 
 Vessel workflow:
 
@@ -113,6 +124,7 @@ Run each production workflow check separately:
 
 ```bash
 go run ./cmd/fermentctl check formula-approval
+go run ./cmd/fermentctl check formula-revision
 go run ./cmd/fermentctl check vessel-run-lifecycle
 go run ./cmd/fermentctl check observations-completion
 ```
