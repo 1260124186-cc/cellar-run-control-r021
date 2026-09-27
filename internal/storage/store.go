@@ -91,10 +91,14 @@ func validateIndexes(value domain.Snapshot) error {
 		if key == "" {
 			return fmt.Errorf("formula %s has an empty normalized name", id)
 		}
-		if existing, found := expectedNames[key]; found && existing != id {
+		lineage := formula.LineageID
+		if lineage == "" {
+			lineage = id
+		}
+		if existing, found := expectedNames[key]; found && existing != lineage {
 			return fmt.Errorf("formula name index contains a duplicate key")
 		}
-		expectedNames[key] = id
+		expectedNames[key] = lineage
 	}
 	if err := compareIndexes("formula name", value.NameIndex, expectedNames); err != nil {
 		return err

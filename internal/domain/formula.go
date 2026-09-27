@@ -9,9 +9,10 @@ import (
 type FormulaState string
 
 const (
-	FormulaDraft    FormulaState = "draft"
-	FormulaApproved FormulaState = "approved"
-	FormulaRetired  FormulaState = "retired"
+	FormulaDraft      FormulaState = "draft"
+	FormulaApproved   FormulaState = "approved"
+	FormulaSuperseded FormulaState = "superseded"
+	FormulaRetired    FormulaState = "retired"
 )
 
 type FormulaStep struct {
@@ -32,10 +33,15 @@ type Formula struct {
 	MaximumDays           int           `json:"maximum_days"`
 	Steps                 []FormulaStep `json:"steps"`
 	State                 FormulaState  `json:"state"`
+	LineageID             string        `json:"lineage_id"`
+	RevisionNumber        int           `json:"revision_number"`
+	SourceFormulaID       string        `json:"source_formula_id,omitempty"`
+	SourceRevision        int           `json:"source_revision,omitempty"`
 	Version               int64         `json:"version"`
 	CreatedAt             time.Time     `json:"created_at"`
 	UpdatedAt             time.Time     `json:"updated_at"`
 	ApprovedAt            *time.Time    `json:"approved_at,omitempty"`
+	SupersededAt          *time.Time    `json:"superseded_at,omitempty"`
 	RetiredAt             *time.Time    `json:"retired_at,omitempty"`
 }
 
@@ -90,7 +96,7 @@ func (f Formula) Validate() error {
 	if len(f.Steps) > 24 {
 		return FieldError(CodeInvalidInput, "steps", "must contain at most 24 entries")
 	}
-	if f.State == FormulaApproved || f.State == FormulaRetired {
+	if f.State == FormulaApproved || f.State == FormulaSuperseded || f.State == FormulaRetired {
 		if err := ValidateFormulaSteps(f.Steps, true); err != nil {
 			return err
 		}
@@ -165,6 +171,56 @@ func (f *Formula) Retire(now time.Time) error {
 	stamp := now.UTC()
 	f.State = FormulaRetired
 	f.RetiredAt = &stamp
+	f.UpdatedAt = stamp
+	f.Version++
+	return nil
+}
+
+func (f Formula) IsRevision() bool {
+	return f.SourceFormulaID != ""
+}
+
+// NewFormulaRevision derives a draft revision candidate from an approved
+// source formula. The candidate copies the source content and records the
+// source version, but it never replaces the source until it is approved.
+func NewFormulaRevision(source Formula, id string, now time.Time) (Formula, error) {
+	if source.State != FormulaApproved {
+		return Formula{}, NewError(CodeFormulaRevisionSource,
+			"a revision requires an approved source formula")
+	}
+	lineage := source.LineageID
+	if lineage == "" {
+		lineage = source.ID
+	}
+	stamp := now.UTC()
+	return Formula{
+		ID:                    id,
+		Name:                  source.Name,
+		Style:                 source.Style,
+		TargetOriginalGravity: source.TargetOriginalGravity,
+		TargetFinalGravity:    source.TargetFinalGravity,
+		MaxFermentationTempC:  source.MaxFermentationTempC,
+		MinimumDays:           source.MinimumDays,
+		MaximumDays:           source.MaximumDays,
+		Steps:                 append([]FormulaStep(nil), source.Steps...),
+		State:                 FormulaDraft,
+		LineageID:             lineage,
+		RevisionNumber:        source.RevisionNumber + 1,
+		SourceFormulaID:       source.ID,
+		SourceRevision:        source.RevisionNumber,
+		Version:               1,
+		CreatedAt:             stamp,
+		UpdatedAt:             stamp,
+	}, nil
+}
+
+func (f *Formula) Supersede(now time.Time) error {
+	if f.State != FormulaApproved {
+		return NewError(CodeFormulaState, "only an approved formula can be superseded")
+	}
+	stamp := now.UTC()
+	f.State = FormulaSuperseded
+	f.SupersededAt = &stamp
 	f.UpdatedAt = stamp
 	f.Version++
 	return nil

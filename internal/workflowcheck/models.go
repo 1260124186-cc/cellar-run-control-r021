@@ -8,10 +8,14 @@ import (
 )
 
 type formulaView struct {
-	ID      string               `json:"id"`
-	State   domain.FormulaState  `json:"state"`
-	Version int64                `json:"version"`
-	Steps   []domain.FormulaStep `json:"steps"`
+	ID              string               `json:"id"`
+	State           domain.FormulaState  `json:"state"`
+	Version         int64                `json:"version"`
+	Steps           []domain.FormulaStep `json:"steps"`
+	LineageID       string               `json:"lineage_id"`
+	RevisionNumber  int                  `json:"revision_number"`
+	SourceFormulaID string               `json:"source_formula_id"`
+	SourceRevision  int                  `json:"source_revision"`
 }
 
 type vesselView struct {
@@ -22,12 +26,14 @@ type vesselView struct {
 }
 
 type runView struct {
-	ID           string                      `json:"id"`
-	State        domain.RunState             `json:"state"`
-	Version      int64                       `json:"version"`
-	VesselID     *string                     `json:"vessel_id"`
-	Observations []domain.GravityObservation `json:"observations"`
-	Metrics      *domain.RunMetrics          `json:"metrics"`
+	ID              string                      `json:"id"`
+	State           domain.RunState             `json:"state"`
+	Version         int64                       `json:"version"`
+	FormulaID       string                      `json:"formula_id"`
+	FormulaRevision int                         `json:"formula_revision"`
+	VesselID        *string                     `json:"vessel_id"`
+	Observations    []domain.GravityObservation `json:"observations"`
+	Metrics         *domain.RunMetrics          `json:"metrics"`
 }
 
 type pairView struct {

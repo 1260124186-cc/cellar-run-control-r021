@@ -49,6 +49,7 @@ func (s *Service) CreateRun(input CreateRunInput) (domain.FermentationRun, error
 			return domain.NewError(domain.CodeRunConflict,
 				"a run with the same code already exists")
 		}
+		run.FormulaRevision = formula.RevisionNumber
 		snapshot.Runs[run.ID] = run.Clone()
 		snapshot.RunIndex[run.Code] = run.ID
 		return nil

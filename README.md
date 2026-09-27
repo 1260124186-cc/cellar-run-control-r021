@@ -70,6 +70,8 @@ Formula workflow:
 - `POST /v1/formulas`
 - `GET /v1/formulas`
 - `GET /v1/formulas/{id}`
+- `POST /v1/formulas/{id}/revise`
+- `GET /v1/formulas/{id}/revisions`
 - `PUT /v1/formulas/{id}/steps`
 - `POST /v1/formulas/{id}/approve`
 - `POST /v1/formulas/{id}/retire`
@@ -113,6 +115,7 @@ Run each production workflow check separately:
 
 ```bash
 go run ./cmd/fermentctl check formula-approval
+go run ./cmd/fermentctl check formula-revision
 go run ./cmd/fermentctl check vessel-run-lifecycle
 go run ./cmd/fermentctl check observations-completion
 ```
@@ -139,6 +142,7 @@ The baseline intentionally keeps several independent behavior surfaces visible
 for later engineering evaluation:
 
 - formula name normalization and duplicate detection;
+- controlled formula revision, supersession, and lineage history;
 - target gravity and process-step range validation;
 - aggregate version conflict checks;
 - atomic vessel reservation and release;

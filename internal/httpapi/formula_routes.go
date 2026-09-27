@@ -61,6 +61,24 @@ func registerFormulaRoutes(mux *http.ServeMux, app *service.Service) {
 		writeJSON(response, http.StatusOK, formula)
 	})
 
+	mux.HandleFunc("POST /v1/formulas/{id}/revise", func(response http.ResponseWriter, request *http.Request) {
+		formula, err := app.ReviseFormula(request.PathValue("id"))
+		if err != nil {
+			writeDomainError(response, err)
+			return
+		}
+		writeJSON(response, http.StatusCreated, formula)
+	})
+
+	mux.HandleFunc("GET /v1/formulas/{id}/revisions", func(response http.ResponseWriter, request *http.Request) {
+		revisions, err := app.ListFormulaRevisions(request.PathValue("id"))
+		if err != nil {
+			writeDomainError(response, err)
+			return
+		}
+		writeJSON(response, http.StatusOK, map[string]any{"revisions": revisions})
+	})
+
 	mux.HandleFunc("PUT /v1/formulas/{id}/steps", func(response http.ResponseWriter, request *http.Request) {
 		body, err := decodeJSON[setStepsRequest](response, request)
 		if !handleDecode(response, err) {
